@@ -75,7 +75,7 @@ if st.button("Detect Emotion from Camera"):
             break
 
     cap.release()
-    cv2.destroyAllWindows()
+    
 
     # Ask user to confirm
     if detected:
