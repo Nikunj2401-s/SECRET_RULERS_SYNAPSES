@@ -34,20 +34,22 @@ class FERDataset(Dataset):
         return img, emotion
 
 # ------------------------------
-# 2. Model Architecture
+# 2. Improved Model Architecture
 # ------------------------------
-class EmotionCNN(nn.Module):
+class ImprovedEmotionCNN(nn.Module):
     def __init__(self):
-        super(EmotionCNN, self).__init__()
+        super(ImprovedEmotionCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.dropout = nn.Dropout(0.25)
         self.fc1 = nn.Linear(64 * 12 * 12, 128)
         self.fc2 = nn.Linear(128, 7)
 
     def forward(self, x):
-        x = self.pool(torch.relu(self.conv1(x)))  # 48 → 24
-        x = self.pool(torch.relu(self.conv2(x)))  # 24 → 12
+        x = self.pool(torch.relu(self.conv1(x)))  # 48x48 -> 24x24
+        x = self.pool(torch.relu(self.conv2(x)))  # 24x24 -> 12x12
+        x = self.dropout(x)
         x = x.view(-1, 64 * 12 * 12)
         x = torch.relu(self.fc1(x))
         x = self.fc2(x)
@@ -60,7 +62,7 @@ def train():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Transforms
+    # Transforms with normalization
     transform = transforms.Compose([
         transforms.Grayscale(),
         transforms.ToTensor(),
@@ -77,12 +79,12 @@ def train():
     val_loader = DataLoader(val_set, batch_size=64, shuffle=False)
 
     # Model, loss, optimizer
-    model = EmotionCNN().to(device)
+    model = ImprovedEmotionCNN().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Training loop
-    num_epochs = 15
+    num_epochs = 20
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
