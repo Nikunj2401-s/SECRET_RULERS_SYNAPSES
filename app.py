@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import cv2
 import numpy as np
-import webbrowser
 from torchvision import transforms
 
 # Emotion labels
@@ -15,13 +14,14 @@ class EmotionCNN(nn.Module):
         super(EmotionCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 8, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(8 * 24 * 24, 7)  # 48x48 input → down to 24x24 → flat = 4608
+        self.fc1 = nn.Linear(8 * 24 * 24, 7)
 
     def forward(self, x):
         x = self.pool(torch.relu(self.conv1(x)))
         x = x.view(-1, 8 * 24 * 24)
         x = self.fc1(x)
         return x
+
 # Load model
 model = EmotionCNN()
 model.load_state_dict(torch.load("emotion_model.pth", map_location=torch.device('cpu')))
@@ -47,41 +47,35 @@ mood_music = {
 }
 
 # Streamlit app
-st.title("EmoFlow: Mood-based YouTube Music Recommender")
+st.set_page_config(page_title="EmoFlow", page_icon="🎧")
+st.title("🎧 EmoFlow: Mood-Based YouTube Music Recommender")
 
-if st.button("Detect Emotion from Camera"):
-    cap = cv2.VideoCapture(0)
-    st.write("Camera opened. Please look into the camera...")
-    
-    detected = False
-    while not detected:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Camera error!")
-            break
+st.write("Please take a selfie to detect your emotion:")
+picture = st.camera_input("Take a selfie")
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+if picture is not None:
+    file_bytes = np.asarray(bytearray(picture.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, 1)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
+    if len(faces) == 0:
+        st.warning("😕 No face detected in the image. Please upload a clearer selfie.")
+    else:
         for (x, y, w, h) in faces:
-            face = frame[y:y+h, x:x+w]
+            face = image[y:y+h, x:x+w]
             face_tensor = transform(face).unsqueeze(0)
             output = model(face_tensor)
             _, predicted = torch.max(output, 1)
             emotion = EMOTIONS[predicted.item()]
+
+            st.image(face, caption=f"Detected Emotion: {emotion}", channels="BGR")
             st.success(f"Detected Emotion: **{emotion}**")
-            detected = True
+
+            confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
+            if confirm == "Yes":
+                st.markdown(f"[🎵 Open Music for {emotion} Mood]({mood_music[emotion]})", unsafe_allow_html=True)
+            else:
+                st.warning("Please take another selfie to try again.")
             break
-
-    cap.release()
-    
-
-    # Ask user to confirm
-    if detected:
-        confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
-        if confirm == "Yes":
-            st.write(f"Opening YouTube music for mood: {emotion}")
-            webbrowser.open(mood_music[emotion])
-        else:
-            st.warning("Please re-run detection to try again.")
