@@ -56,9 +56,12 @@ Welcome to **EmoFlow**! We detect your facial emotion using your camera and reco
 st.markdown("---")
 
 # Auto trigger camera input
-picture = st.camera_input("📸 Take a selfie to detect your mood")
+st.subheader("📸 Let's detect your emotion")
+st.markdown("Please allow access to your webcam and take a clear selfie:")
+picture = st.camera_input("Take a selfie")
 
 if picture is not None:
+    st.info("🔍 Analyzing your emotion...")
     file_bytes = np.asarray(bytearray(picture.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, 1)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -70,12 +73,17 @@ if picture is not None:
     else:
         for (x, y, w, h) in faces:
             face = image[y:y+h, x:x+w]
-            face_tensor = transform(face).unsqueeze(0)
-            output = model(face_tensor)
-            _, predicted = torch.max(output, 1)
-            emotion = EMOTIONS[predicted.item()]
+            face = cv2.resize(face, (48, 48))
+            face_gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+            face_tensor = transform(face_gray).unsqueeze(0)
 
-            st.image(face, caption=f"Detected Emotion: {emotion}", channels="BGR")
+            output = model(face_tensor)
+            probs = torch.softmax(output, dim=1).detach().numpy()[0]
+            top_emotion_idx = np.argmax(probs)
+            emotion = EMOTIONS[top_emotion_idx]
+            confidence = probs[top_emotion_idx] * 100
+
+            st.image(face, caption=f"Detected Emotion: {emotion} ({confidence:.1f}% confidence)", channels="BGR")
             st.success(f"Emotion: **{emotion}**")
 
             confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
