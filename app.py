@@ -5,11 +5,14 @@ import cv2
 import numpy as np
 from torchvision import transforms
 
-# Define model structure
+# Emotion labels
+EMOTIONS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
+
+# Define the model structure
 class EmotionCNN(nn.Module):
     def __init__(self):
         super(EmotionCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 8, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(1, 8, 3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.fc1 = nn.Linear(8 * 24 * 24, 7)
 
@@ -24,60 +27,70 @@ model = EmotionCNN()
 model.load_state_dict(torch.load("emotion_model.pth", map_location=torch.device('cpu')))
 model.eval()
 
-# Emotion labels
-EMOTIONS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
-
-# Preprocessing
+# Transformation
 transform = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.Grayscale(num_output_channels=1),
+    transforms.Grayscale(),
     transforms.Resize((48, 48)),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
 ])
 
-# YouTube links
-music_links = {
-    'Happy': ["https://www.youtube.com/watch?v=ZbZSe6N_BXs"],
-    'Sad': ["https://www.youtube.com/watch?v=4N3N1MlvVc4"],
-    'Angry': ["https://www.youtube.com/watch?v=sO5APfKnR50"],
-    'Surprise': ["https://www.youtube.com/watch?v=lTRiuFIWV54"],
-    'Fear': ["https://www.youtube.com/watch?v=FYgM3j1ZxPU"],
-    'Disgust': ["https://www.youtube.com/watch?v=2Vv-BfVoq4g"],
-    'Neutral': ["https://www.youtube.com/watch?v=ktvTqknDobU"]
+# YouTube music links by mood
+mood_music = {
+    "Happy": "https://www.youtube.com/results?search_query=happy+songs+playlist",
+    "Sad": "https://www.youtube.com/results?search_query=sad+songs+playlist",
+    "Angry": "https://www.youtube.com/results?search_query=calm+down+music",
+    "Neutral": "https://www.youtube.com/results?search_query=lofi+chill+beats",
+    "Fear": "https://www.youtube.com/results?search_query=relaxing+songs",
+    "Surprise": "https://www.youtube.com/results?search_query=feel+good+music",
+    "Disgust": "https://www.youtube.com/results?search_query=uplifting+songs",
 }
 
-# UI
-st.title("🎶 EMOFLOW - Emotion-Based Music Recommender")
-st.write("Take a picture, and get a music suggestion based on your detected emotion.")
+# Streamlit UI
+st.set_page_config(page_title="EmoFlow", page_icon="🎧", layout="centered")
+st.title("🎧 EmoFlow: Emotion-Based Music Recommender")
+st.markdown("""
+Welcome to **EmoFlow**! We detect your facial emotion using your webcam and recommend a personalized music playlist to match your mood.
+""")
 
-img = st.camera_input("📷 Capture your face")
+st.markdown("---")
 
-if img is not None:
-    try:
-        file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
-        frame = cv2.imdecode(file_bytes, 1)
+if st.button("📸 Detect Emotion from Camera"):
+    with st.spinner("Opening camera and detecting emotion... Please look at the webcam."):
+        cap = cv2.VideoCapture(0)
+        detected = False
+        emotion = None
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-
-        if len(faces) == 0:
-            st.warning("No face detected. Please try again with a clearer image.")
+        if not cap.isOpened():
+            st.error("🚫 Unable to access the webcam. Please allow access or try another browser.")
         else:
-            for (x, y, w, h) in faces:
-                roi = frame[y:y + h, x:x + w]
-                roi_tensor = transform(roi).unsqueeze(0)
+            while not detected:
+                ret, frame = cap.read()
+                if not ret:
+                    st.error("⚠️ Failed to capture frame from camera.")
+                    break
 
-                with torch.no_grad():
-                    outputs = model(roi_tensor)
-                    _, predicted = torch.max(outputs, 1)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+                for (x, y, w, h) in faces:
+                    face = frame[y:y+h, x:x+w]
+                    face_tensor = transform(face).unsqueeze(0)
+                    output = model(face_tensor)
+                    _, predicted = torch.max(output, 1)
                     emotion = EMOTIONS[predicted.item()]
 
-                st.success(f"Detected Emotion: **{emotion}**")
-                st.subheader("🎵 Suggested Music:")
-                for link in music_links[emotion]:
-                    st.markdown(f"- [🎧 Play]({link})")
-                break
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+                    st.image(face, caption=f"Detected Emotion: {emotion}", channels="BGR")
+                    st.success(f"Detected Emotion: **{emotion}**")
+                    detected = True
+                    break
+
+            cap.release()
+
+    if detected and emotion:
+        confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
+        if confirm == "Yes":
+            st.markdown(f"[🎵 Open Music for {emotion} Mood]({mood_music[emotion]})", unsafe_allow_html=True)
+        else:
+            st.warning("Please click the button again to re-detect your emotion.")
