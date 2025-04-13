@@ -50,34 +50,37 @@ mood_music = {
 st.set_page_config(page_title="EmoFlow", page_icon="🎧", layout="centered")
 st.title("🎧 EmoFlow: Emotion-Based Music Recommender")
 st.markdown("""
-Welcome to **EmoFlow**! We detect your facial emotion using a selfie and recommend a personalized music playlist to match your mood.
+Welcome to **EmoFlow**! We detect your facial emotion using your camera and recommend a personalized music playlist to match your mood.
 """)
 
 st.markdown("---")
 
-uploaded_image = st.file_uploader("📤 Upload a selfie image", type=["jpg", "jpeg", "png"])
+use_camera = st.button("📸 Capture from Camera")
 
-if uploaded_image is not None:
-    file_bytes = np.asarray(bytearray(uploaded_image.read()), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, 1)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+if use_camera:
+    picture = st.camera_input("Take a selfie")
 
-    if len(faces) == 0:
-        st.warning("😕 No face detected in the image. Please upload a clearer selfie.")
-    else:
-        for (x, y, w, h) in faces:
-            face = image[y:y+h, x:x+w]
-            face_tensor = transform(face).unsqueeze(0)
-            output = model(face_tensor)
-            _, predicted = torch.max(output, 1)
-            emotion = EMOTIONS[predicted.item()]
+    if picture is not None:
+        file_bytes = np.asarray(bytearray(picture.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, 1)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-            st.image(face, caption=f"Detected Emotion: {emotion}", channels="BGR")
-            st.success(f"Emotion: **{emotion}**")
+        if len(faces) == 0:
+            st.warning("😕 No face detected in the photo. Try again with a clearer selfie.")
+        else:
+            for (x, y, w, h) in faces:
+                face = image[y:y+h, x:x+w]
+                face_tensor = transform(face).unsqueeze(0)
+                output = model(face_tensor)
+                _, predicted = torch.max(output, 1)
+                emotion = EMOTIONS[predicted.item()]
 
-            confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
-            if confirm == "Yes":
-                st.markdown(f"[🎵 Open Music for {emotion} Mood]({mood_music[emotion]})", unsafe_allow_html=True)
-            break
+                st.image(face, caption=f"Detected Emotion: {emotion}", channels="BGR")
+                st.success(f"Emotion: **{emotion}**")
+
+                confirm = st.radio("Do you want to continue with this mood?", ["Yes", "No"])
+                if confirm == "Yes":
+                    st.markdown(f"[🎵 Open Music for {emotion} Mood]({mood_music[emotion]})", unsafe_allow_html=True)
+                break
